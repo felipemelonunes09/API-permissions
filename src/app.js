@@ -1,6 +1,12 @@
 const bodyParser = require('body-parser')
 const express = require('express');
 const { AuthModule } = require('./authorization/AuthModule');
+const permissionRouter = require('./authorization/permissions/permissions.router');
+const permissionsService = require('./authorization/permissions/permissions.service');
+const roleRouter = require('./authorization/roles/roles.router');
+const rolesService = require('./authorization/roles/roles.service');
+const routeRouter = require('./authorization/routes/routes.router');
+const routesService = require('./authorization/routes/routes.service');
 const routerUser = require('./users/users.router');
 
 
@@ -18,9 +24,18 @@ app.get('/', (req, res) => {
     })
 })
 
-AuthModule().config(app)
+AuthModule().configAndProtect(app, {
+    role: rolesService,
+    permission: permissionsService,
+    route: routesService
+},{
+    role: roleRouter,
+    permission: permissionRouter,
+    route: routeRouter
+})
 
 app.use('/users', routerUser)
+
 
 module.exports = app
 
