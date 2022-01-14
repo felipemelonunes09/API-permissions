@@ -8,12 +8,12 @@ class UsersController {
     }
     
     async findOne(req, res) {
-        const result = await usersService.findOne(req.params.id)
+        const result = await usersService.findOne(req.params.id, { exclude: ['password'] } )
         res.status(result.code).send(result)
     }
 
     async findAll(req, res) {
-        const result = await usersService.findAll()
+        const result = await usersService.findAll({ exclude: ['password'] })
         res.status(result.code).send(result)
     }
 
@@ -44,6 +44,14 @@ class UsersController {
 
     async deassign(req, res) { 
         const result = await usersService.deassign(req.params.id, req.body.roles)
+        res.status(result.code).send(result)
+    }
+
+    async login(req, res) {
+
+        let { password, email } = req.body
+        const result = await usersService.login(email, password)
+
         res.status(result.code).send(result)
     }
 }

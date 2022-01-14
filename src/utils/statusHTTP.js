@@ -7,7 +7,8 @@ const HTTP = {
     badRequest: (message) => { return base(false, message, 400) },
     internalServer: (message = 'Server error, please try again later ;)') => { return base(false, message, 500)},
     notFound: (message = 'The resource does not exists') => { return base(false, message, 404) },
-    conflict: (message) => { return base(false, message, 409) }
+    conflict: (message) => { return base(false, message, 409) },
+    unauthorized: (message) => { return base(false, message, 401) }
 }
 
 module.exports = HTTP;

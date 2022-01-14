@@ -2,6 +2,21 @@ const rolesToUser = require('../authorization/models/relational/rolesToUser.mode
 const { deleteItem, matchCreationRightSide } = require('../utils/modelUtils')
 const HTTP = require('../utils/statusHTTP')
 const user = require('./models/users.model')
+const bcrypt = require('bcrypt')
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET, JWT_EXPIRATION } = require('../enviroment')
+
+const generateUserToken = async (user) => {
+
+    console.log("test")
+
+    let { id, email } = user
+    
+    const token = await jwt.sign({ id, email }, JWT_SECRET, { expiresIn: JWT_EXPIRATION })
+    console.log(token)
+    return token
+}
+
 
 class UsersService {
 
@@ -16,9 +31,9 @@ class UsersService {
         }
     }
     
-    async findOne(id) { 
+    async findOne(id, attributes) { 
         try {
-            const result = await user.findOne({ where: { id } })
+            const result = await user.findOne({ where: { id }, attributes })
             return { ...HTTP.ok(), result }
         }
         catch (e) { 
@@ -26,9 +41,19 @@ class UsersService {
         }
     }
 
-    async findAll() { 
+    async findByEmail(email) {
         try {
-            const result = await user.findAll()
+            const result = await user.findOne({ where: { email } })
+            return { ...HTTP.ok(), result }
+        }
+        catch (e) {
+            return HTTP.internalServer()
+        }
+    }
+
+    async findAll(attributes) { 
+        try {
+            const result = await user.findAll({ attributes })
             return { ...HTTP.ok(), result }
         }
         catch (e) {
@@ -77,7 +102,7 @@ class UsersService {
         }
      }
 
-     async assign(id, data) { 
+    async assign(id, data) { 
          try {
             console.log({ id, data})
             let user = (await this.findOne(id)).result
@@ -95,9 +120,9 @@ class UsersService {
             console.log(e)
             return HTTP.internalServer()
          }
-     }
+    }
 
-     async deassign(id, data) { 
+    async deassign(id, data) { 
         try {
             let user = (await this.findOne(id)).result
             if (user != undefined || user.id != undefined) {
@@ -120,8 +145,30 @@ class UsersService {
             console.log(e)
             return HTTP.internalServer()
         }
-     }
-     
+    }
+
+    async login(email, password) { 
+        try {
+            if (email == undefined || password == undefined)
+                return HTTP.badRequest()
+
+            const _user = (await this.findByEmail(email)).result;
+            if (_user != undefined) {
+                const match = await bcrypt.compare(password, _user.password)
+                if(match) {
+                    return {
+                        ...HTTP.ok(),
+                        token: await generateUserToken(_user)
+                    }
+                }
+                return HTTP.unauthorized()
+            }
+            return HTTP.notFound()
+        }
+        catch {
+            return HTTP.internalServer()
+        }
+    }
 }
 
 module.exports = new UsersService()

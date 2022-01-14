@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
-const connection = require("../../database/connection");
 const { DB_FORCE } = require("../../enviroment");
+const connection = require("../../database/connection");
 const bcrypt = require('bcrypt')
 
 const user = connection.define('users', {
@@ -11,15 +11,19 @@ const user = connection.define('users', {
         unique: true,
         validate: {
             isEmail: true
-        },
-        set: (value) => {
-            const saltsRound = 15;
-            bcrypt.hash(value, saltsRound).then((hash) => {
-                this.setDataValue('password', hash)
-            })
         }
     },
-    password: { type: DataTypes.STRING, allowNull: false }
+    password: { 
+        type: DataTypes.STRING, 
+        allowNull: false,
+        set (value) { 
+            
+            const saltsRound = 15;
+            const hash = bcrypt.hashSync(value, saltsRound)
+
+            this.setDataValue('password', hash)
+        }
+    }
 },
 {
     paranoid: true
