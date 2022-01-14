@@ -45,6 +45,16 @@ class RoutesService {
         }
     }
 
+    async findByOrigin(origin, method) { 
+        try {
+            const result = await protectedRoutes.findOne({ where: { origin, type: method }, include:  permission})
+            return { ...HTTP.ok(), result }
+        }
+        catch (e) {
+            return HTTP.internalServer()
+        }
+    }
+
     async delete(id) {
         try {
             const result = await deleteItem(protectedRoutes, id, false)
