@@ -8,6 +8,7 @@ const rolesService = require('./authorization/roles/roles.service');
 const routeRouter = require('./authorization/routes/routes.router');
 const routesService = require('./authorization/routes/routes.service');
 const routerUser = require('./users/users.router');
+const usersService = require('./users/users.service');
 
 
 const app = express();
@@ -25,7 +26,7 @@ app.get('/', (req, res) => {
 })
 
 AuthModule().configAndProtect(app, {
-    role: rolesService,
+    user: usersService,
     permission: permissionsService,
     route: routesService
 },{
