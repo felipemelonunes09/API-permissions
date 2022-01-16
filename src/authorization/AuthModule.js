@@ -1,36 +1,24 @@
+const jwt = require("jsonwebtoken")
+const { JWT_SECRET } = require("../enviroment")
+const { internalServer } = require("../utils/statusHTTP")
 const HTTP = require("../utils/statusHTTP")
-const permissionRouter = require("./permissions/permissions.router")
-const roleRouter = require("./roles/roles.router")
-const routeRouter = require("./routes/routes.router")
-const routesService = require("./routes/routes.service")
+const { AUTHORIZATION_DICIONATY, ROUTE_DICTIONARY } = require("./utils")
+const validationLayers = require("./validationLayers")
 
 const AuthModule = () => {
 
-    let managerModel = { route: undefined, role: undefined, permission: undefined }
+    let managerModel = { route: undefined, user: undefined, permission: undefined }
 
     const shield = () => {
 
         let contexRoute = undefined
+        let user = { }
+        const authorization = { }
         const layers = validationLayers()
 
-        const authorization = { }
-        const user = { }
-
-        const AUTHORIZATION_DICIONATY = {
-            REJECT: -1,
-            ACCEPTED: 0,
-            OK : 1
-        }
-
-        const ROUTE_DICTIONARY = { 
-            NOT_MAPPED: -1,
-            PRIVATE: 0,
-            PUBLIC: 1
-
-        }
-
         const verifyRoute = async ({ url, method }) => {
-            const route = await layers.validateRoute(url, method)
+            const route = await layers.validateRoute(url, method, managerModel.route)
+
             if (route == undefined)
                 return ROUTE_DICTIONARY.NOT_MAPPED
             
@@ -41,19 +29,18 @@ const AuthModule = () => {
         const verifyUser = async ({ headers }) => {
 
             const authToken = headers['authorization']
-            const { authenticated, token, payload } = layers.validateUserToken(authToken)
-            
-            if (authenticated != true)
+            const result = await layers.validateUserToken(authToken, jwt, managerModel.user, JWT_SECRET)
+
+            if (result == undefined)
                 return false
             
-            user = { token, payload }
-            return authenticated
+            user = { token: result.token, payload: result.payload }
+            return result.authenticated
         }
-
+        
         const authorizeRoute = async (req, res, next) => {
             try {
-                const result = await verifyRoute(req) || ROUTE_DICTIONARY.NOT_MAPPED
-                console.log(result)
+                const result = (await verifyRoute(req)) || ROUTE_DICTIONARY.NOT_MAPPED
                 switch (result) {
                     case ROUTE_DICTIONARY.PUBLIC:
                         authorization.route = AUTHORIZATION_DICIONATY.ACCEPTED
@@ -73,42 +60,84 @@ const AuthModule = () => {
                 }
             }
             catch(e) {
-                const result = HTTP.internalServer()
-                res.status(result.code).send(result)
+                authorization.error = AUTHORIZATION_DICIONATY.ERROR
             }
         }
 
         const authorizeUser = async (req, res) => {
             try {                
-                const isAuthenticated = verifyUser(req) || false
-                if ((await isAuthenticated) === true) {
-                    authorization.user = true
+                const isAuthenticated = (await verifyUser(req)) || false
+
+                if (isAuthenticated === true) {
+                    authorization.user = AUTHORIZATION_DICIONATY.OK
                     return ;
                 }
 
+                authorization.use = AUTHORIZATION_DICIONATY.REJECT
                 const result = HTTP.unauthorized()
                 res.status(result.code).send(result)
             } 
             catch (e) {
-                const result = HTTP.internalServer()
-                res.status(result.code).send(result)
+                authorization.error = AUTHORIZATION_DICIONATY.ERROR
+            }
+        }
+
+        const authorizeAccess = async (req, res, next) => {
+            try {
+                const routePermissions = contexRoute.Permissions
+                const userPermissions = user.payload.dataValues.mappedPermissions
+
+                authorization.access = AUTHORIZATION_DICIONATY.REJECT;
+
+                if (routePermissions.length > 0 && userPermissions.length > 0) {
+                    routePermissions.forEach((routePermission) => {
+                        const found = userPermissions.find(element => element.id == routePermission.id)
+                        if (found != undefined) {
+                            authorization.access = AUTHORIZATION_DICIONATY.OK 
+                        }
+                    })
+                }
+
+            }
+            catch (e) {
+                authorization.error = AUTHORIZATION_DICIONATY.ERROR
+            }
+        }
+
+        const acceptOrReject = (res, next) => { 
+            if (authorization.route == AUTHORIZATION_DICIONATY.OK &&
+                authorization.user == AUTHORIZATION_DICIONATY.OK &&
+                authorization.access == AUTHORIZATION_DICIONATY.OK 
+            ) {
+                next()
+            }
+            else {
+
+                if (authorization.error == AUTHORIZATION_DICIONATY.ERROR) {
+                    const result = HTTP.forbidden(`AuthModuleError: the route could not be authorized`)
+                    res.status(result.code).send(result)
+                } 
+                else {
+                    const result = HTTP.forbidden(`You must have the rights permissions to access this route`)
+                    res.status(result.code).send(result)
+                }
             }
         }
 
         const managerUserRouteAccess = async (req, res, next) => {
             try {
-
                 await authorizeRoute(req, res, next)
-                    
 
                 if (authorization.route == AUTHORIZATION_DICIONATY.OK)
                     await authorizeUser(req, res, next)
                     
                 if (authorization.user == AUTHORIZATION_DICIONATY.OK)
                     await authorizeAccess(req, res, next)
+
+                acceptOrReject(res, next)
             }
             catch (e) {
-                const result = HTTP.internalServer()
+                const result = HTTP.internalServer('The manager user router access returned false')
                 res.status(result.code).send(result)
             }
         }
@@ -116,34 +145,16 @@ const AuthModule = () => {
         return managerUserRouteAccess 
     }
 
-    const validationLayers = () => {
-
-        const validateRoute = async (url, method) => { 
-            const route = (await managerModel.route.findByOrigin(url, method)).result
-            return (route == undefined || route.origin == undefined) ? undefined : route
-        }
-
-        const validateUserToken = async (token)  => {
-            const authToken = token.split(' ')[1]
-            console.log(authToken)
-        }
-
-        return { validateRoute, validateUserToken }
-    }
-
     const config = async (app, _manager, _router) => {
-
         managerModel = _manager
         app.use('/permissions', _router.permission)        
         app.use('/roles', _router.role)
         app.use('/routes', _router.route)
-
     }
 
     const configAndProtect = (app, _manager, _router) => {
         app.use(shield())
         config(app, _manager, _router)
-
     }
 
     return {
@@ -151,4 +162,5 @@ const AuthModule = () => {
         shield, validationLayers
     }
 }
+
 module.exports = { AuthModule }
