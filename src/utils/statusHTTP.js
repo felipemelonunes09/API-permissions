@@ -8,7 +8,8 @@ const HTTP = {
     internalServer: (message = 'Server error, please try again later ;)') => { return base(false, message, 500)},
     notFound: (message = 'The resource does not exists') => { return base(false, message, 404) },
     conflict: (message) => { return base(false, message, 409) },
-    unauthorized: (message) => { return base(false, message, 401) }
+    unauthorized: (message) => { return base(false, message, 401) },
+    forbidden: (message) => { return base(false, message, 403) }
 }
 
 module.exports = HTTP;
