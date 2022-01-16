@@ -5,6 +5,9 @@ const user = require('./models/users.model')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET, JWT_EXPIRATION } = require('../enviroment')
+const { permission } = require('../authorization/models/permission.model')
+const { role } = require('../authorization/models/role.model')
+const rolesService = require('../authorization/roles/roles.service')
 
 const generateUserToken = async (user) => {
 
@@ -31,12 +34,28 @@ class UsersService {
         }
     }
     
-    async findOne(id, attributes) { 
+    async findOne(id, attributes, where = { }) { 
         try {
-            const result = await user.findOne({ where: { id }, attributes })
+
+            const result = await user.findOne({ where: { id, ...where }, attributes, include: [role] })
+            
+            if (result == undefined) 
+                return HTTP.notFound()
+            
+            // warning find one is doing too much
+            const roles = result.Roles
+            let permissions = []
+
+            for (let index = 0; index < roles.length; index++) {
+                let role = (await rolesService.findOne(roles[index].id)).result
+                permissions = [ ...permissions, ...role.Permissions ]
+            }
+        
+            result.dataValues['mappedPermissions'] = [...new Set(permissions)]
             return { ...HTTP.ok(), result }
         }
         catch (e) { 
+            console.log(e)
             return HTTP.internalServer()
         }
     }
@@ -104,7 +123,6 @@ class UsersService {
 
     async assign(id, data) { 
          try {
-            console.log({ id, data})
             let user = (await this.findOne(id)).result
             if (user != undefined || user.id != undefined) {
                 await matchCreationRightSide(undefined, rolesToUser, user.id, data, 'userId', 'RoleId')
@@ -125,7 +143,7 @@ class UsersService {
     async deassign(id, data) { 
         try {
             let user = (await this.findOne(id)).result
-            if (user != undefined || user.id != undefined) {
+            if (user != undefined) {
                 await rolesToUser.destroy({
                     where: {
                         userId: user.id,
